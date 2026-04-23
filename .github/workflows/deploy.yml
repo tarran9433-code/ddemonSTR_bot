@@ -1,0 +1,38 @@
+name: Deploy to Fly.io
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup flyctl
+      uses: superfly/flyctl-actions/setup-flyctl@master
+      
+    # 👇 Создание Volume если не существует
+    - name: Create volume if not exists
+      run: |
+        # Команда пытается создать том; если он уже есть, ошибка игнорируется
+        flyctl volumes create whale_data --region fra --size 1 || true
+      env:
+        FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        
+    - name: Deploy to Fly.io
+      run: flyctl deploy --config fly.toml
+      env:
+        FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        
+    - name: Set secrets
+      run: |
+        flyctl secrets set BOT_TOKEN="${{ secrets.BOT_TOKEN }}" --app ddemonstr-bot
+        flyctl secrets set DEMO_MODE="true" --app ddemonstr-bot
+        flyctl secrets set PYTHONUNBUFFERED="1" --app ddemonstr-bot
+      env:
+        FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
