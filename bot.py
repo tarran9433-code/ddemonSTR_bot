@@ -150,6 +150,7 @@ async def start_http_server(telegram_app, port=8080):
     web_app = web.Application()
     web_app["telegram_app"] = telegram_app
     web_app.router.add_get("/api/transactions", api_transactions)
+    web_app.router.add_get("/", lambda request: web.Response(text="Whale Tracker Bot API is running"))
     runner = web.AppRunner(web_app)
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', port)
