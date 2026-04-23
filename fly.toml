@@ -23,7 +23,3 @@ primary_region = "sjc"
   timeout = "5s"
   method = "GET"
   path = "/api/transactions"
-
-[mounts]
-  source = "whale_data"
-  destination = "/app/data"
