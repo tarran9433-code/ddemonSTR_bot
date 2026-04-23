@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🐋 Whale Tracker Live</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        [v-cloak] { display: none; }
+        .animate-pulse-slow { animation: pulse 3s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white min-h-screen">
+    <div id="app" v-cloak>
+        <div class="container mx-auto px-4 py-6 max-w-4xl">
+            <!-- Header -->
+            <div class="text-center mb-8">
+                <h1 class="text-4xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent mb-2">
+                    🐋 Whale Tracker Live
+                </h1>
+                <p class="text-gray-400">Real-time мониторинг крупных транзакций</p>
+                <div class="mt-2 text-sm">
+                    <span :class="connectionStatusClass" class="px-2 py-1 rounded-full text-xs">
+                        {{ connectionStatus }}
+                    </span>
+                    <span v-if="lastUpdate" class="ml-2 text-gray-500 text-xs">
+                        Обновлено: {{ formatTime(lastUpdate) }}
+                    </span>
+                </div>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <div class="bg-gray-800/50 backdrop-blur rounded-lg p-4 border border-gray-700">
+                    <div class="text-2xl font-bold text-blue-400">{{ transactions.length }}</div>
+                    <div class="text-xs text-gray-400">Транзакций</div>
+                </div>
+                <div class="bg-gray-800/50 backdrop-blur rounded-lg p-4 border border-gray-700">
+                    <div class="text-2xl font-bold text-green-400">${{ totalVolume.toLocaleString() }}</div>
+                    <div class="text-xs text-gray-400">Объём 24ч</div>
+                </div>
+                <div class="bg-gray-800/50 backdrop-blur rounded-lg p-4 border border-gray-700">
+                    <div class="text-2xl font-bold text-yellow-400">{{ topExchange }}</div>
+                    <div class="text-xs text-gray-400">Топ биржа</div>
+                </div>
+                <div class="bg-gray-800/50 backdrop-blur rounded-lg p-4 border border-gray-700">
+                    <div class="text-2xl font-bold text-purple-400">{{ uniqueTokens }}</div>
+                    <div class="text-xs text-gray-400">Токенов</div>
+                </div>
+            </div>
+
+            <!-- Loading State -->
+            <div v-if="loading" class="text-center py-12">
+                <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
+                <p class="mt-4 text-gray-400">Загрузка транзакций...</p>
+            </div>
+
+            <!-- Transactions List -->
+            <div v-else-if="transactions.length > 0" class="space-y-4">
+                <div v-for="tx in transactions" :key="tx.id" 
+                     class="bg-gray-800/50 backdrop-blur rounded-lg p-4 border border-gray-700 hover:border-blue-500 transition-all duration-300">
+                    
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center space-x-3">
+                            <div class="text-2xl">{{ getTokenEmoji(tx.token) }}</div>
+                            <div>
+                                <div class="font-semibold">{{ tx.token }}</div>
+                                <div class="text-xs text-gray-400">{{ getBlockchainName(tx.blockchain) }}</div>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-lg font-bold" :class="tx.type === 'buy' ? 'text-green-400' : 'text-red-400'">
+                                ${{ formatAmount(tx.amount) }}
+                            </div>
+                            <div class="text-xs text-gray-400">{{ formatTime(tx.timestamp) }}</div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between text-sm">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-gray-400">От:</span>
+                            <code class="bg-gray-700 px-2 py-1 rounded text-xs">{{ formatAddress(tx.from_address) }}</code>
+                            <span v-if="isExchange(tx.from_address)" class="text-yellow-400 text-xs">🏦 Биржа</span>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center justify-between text-sm mt-1">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-gray-400">Кому:</span>
+                            <code class="bg-gray-700 px-2 py-1 rounded text-xs">{{ formatAddress(tx.to_address) }}</code>
+                            <span v-if="isExchange(tx.to_address)" class="text-yellow-400 text-xs">🏦 Биржа</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <span class="text-xs px-2 py-1 rounded" 
+                                  :class="tx.type === 'buy' ? 'bg-green-400/20 text-green-400' : 'bg-red-400/20 text-red-400'">
+                                {{ tx.type === 'buy' ? 'ПОКУПКА' : 'ПРОДАЖА' }}
+                            </span>
+                            <a :href="`https://etherscan.io/tx/${tx.hash}`" 
+                               target="_blank" 
+                               class="text-blue-400 hover:text-blue-300 text-xs">
+                                🔗 Etherscan
+                            </a>
+                        </div>
+                    </div>
+
+                    <div v-if="tx.demo" class="text-xs text-gray-500 mt-2 text-center">
+                        🎯 DEMO DATA
+                    </div>
+                </div>
+            </div>
+
+            <!-- Empty State -->
+            <div v-else class="text-center py-12">
+                <div class="text-6xl mb-4">🐋</div>
+                <p class="text-gray-400 text-lg">Нет активных транзакций</p>
+                <p class="text-gray-500 text-sm mt-2">Ожидаем крупные перемещения...</p>
+            </div>
+
+            <!-- Refresh Button -->
+            <div class="text-center mt-8">
+                <button @click="fetchData" 
+                        :disabled="loading"
+                        class="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 px-6 py-2 rounded-lg transition-colors duration-200">
+                    🔄 Обновить
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    transactions: [],
+                    loading: false,
+                    lastUpdate: null,
+                    connectionStatus: 'Подключение...',
+                    // Замени на свой Railway URL
+                    API_URL: 'https://ВАШ-ПРОЕКТ.up.railway.app/api/transactions'
+                }
+            },
+            computed: {
+                totalVolume() {
+                    return this.transactions.reduce((sum, tx) => sum + tx.amount, 0);
+                },
+                topExchange() {
+                    const exchanges = {};
+                    this.transactions.forEach(tx => {
+                        if (this.isExchange(tx.to_address)) {
+                            exchanges['Binance'] = (exchanges['Binance'] || 0) + 1;
+                        }
+                    });
+                    return Object.keys(exchanges).length > 0 ? 'Binance' : 'Unknown';
+                },
+                uniqueTokens() {
+                    const tokens = new Set(this.transactions.map(tx => tx.token));
+                    return tokens.size;
+                },
+                connectionStatusClass() {
+                    return {
+                        'bg-green-500/20 text-green-400': this.connectionStatus === 'Онлайн',
+                        'bg-yellow-500/20 text-yellow-400': this.connectionStatus === 'Подключение...',
+                        'bg-red-500/20 text-red-400': this.connectionStatus === 'Оффлайн'
+                    };
+                }
+            },
+            methods: {
+                async fetchData() {
+                    this.loading = true;
+                    this.connectionStatus = 'Подключение...';
+                    
+                    try {
+                        const response = await fetch(this.API_URL);
+                        if (!response.ok) throw new Error("HTTP error");
+                        
+                        const data = await response.json();
+                        
+                        if (data && data.length > 0) {
+                            this.transactions = data;
+                            this.connectionStatus = 'Онлайн';
+                        } else {
+                            // Если данных нет, показываем демо
+                            this.transactions = this.generateMockData();
+                            this.connectionStatus = 'Демо';
+                        }
+                        
+                        this.lastUpdate = new Date();
+                        
+                    } catch (error) {
+                        console.warn("API error, using mock data", error);
+                        this.transactions = this.generateMockData();
+                        this.connectionStatus = 'Демо';
+                        this.lastUpdate = new Date();
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                
+                generateMockData() {
+                    const mockData = [
+                        {
+                            id: 'demo_1',
+                            token: 'USDT',
+                            type: 'buy',
+                            amount: 2500000,
+                            timestamp: new Date(Date.now() - 5 * 60000).toISOString(),
+                            hash: '0x' + 'a'.repeat(64),
+                            from_address: '0x7a25e8d4e54c8b13df3d8ddfa8b4e3f0c5b5f1a8',
+                            to_address: '0x3f5ce5fbfe3e9af3971dd833d26ba9b5c936f0b4',
+                            blockchain: 'ethereum',
+                            demo: true
+                        },
+                        {
+                            id: 'demo_2',
+                            token: 'BTC',
+                            type: 'sell',
+                            amount: 1800000,
+                            timestamp: new Date(Date.now() - 15 * 60000).toISOString(),
+                            hash: '0x' + 'b'.repeat(64),
+                            from_address: '0x28C6c062987b5A352eAa7D61435E8c21C9d0b2C9',
+                            to_address: '0x503828976d22510aad020410acf28c8d8b93c8ca',
+                            blockchain: 'ethereum',
+                            demo: true
+                        },
+                        {
+                            id: 'demo_3',
+                            token: 'ETH',
+                            type: 'buy',
+                            amount: 1200000,
+                            timestamp: new Date(Date.now() - 30 * 60000).toISOString(),
+                            hash: '0x' + 'c'.repeat(64),
+                            from_address: '0x0a869d79a7052c7f1b55a8ebabbea3420f0d1e1',
+                            to_address: '0xee7fa02464dd07e3e8d3e4fc24f5b5f2e2f6b6d3',
+                            blockchain: 'ethereum',
+                            demo: true
+                        }
+                    ];
+                    
+                    mockData.forEach(tx => tx.demo = true);
+                    return mockData;
+                },
+                
+                formatAmount(amount) {
+                    if (amount >= 1000000) {
+                        return (amount / 1000000).toFixed(2) + 'M';
+                    } else if (amount >= 1000) {
+                        return (amount / 1000).toFixed(1) + 'K';
+                    }
+                    return amount.toLocaleString();
+                },
+                
+                formatTime(timestamp) {
+                    const date = new Date(timestamp);
+                    const now = new Date();
+                    const diff = now - date;
+                    
+                    if (diff < 60000) return 'только что';
+                    if (diff < 3600000) return Math.floor(diff / 60000) + ' мин назад';
+                    if (diff < 86400000) return Math.floor(diff / 3600000) + ' ч назад';
+                    
+                    return date.toLocaleDateString();
+                },
+                
+                formatAddress(address) {
+                    return address ? address.slice(0, 6) + '...' + address.slice(-4) : 'Unknown';
+                },
+                
+                getTokenEmoji(token) {
+                    const emojis = {
+                        'USDT': '💰',
+                        'USDC': '💵',
+                        'BTC': '₿',
+                        'ETH': '💎',
+                        'BNB': '🟡',
+                        'SOL': '🟣',
+                        'ADA': '🔵',
+                        'XRP': '⚫'
+                    };
+                    return emojis[token] || '🪙';
+                },
+                
+                getBlockchainName(blockchain) {
+                    const names = {
+                        'ethereum': 'Ethereum',
+                        'tron': 'Tron',
+                        'bsc': 'BSC',
+                        'polygon': 'Polygon'
+                    };
+                    return names[blockchain] || blockchain;
+                },
+                
+                isExchange(address) {
+                    // Простая проверка известных адресов бирж
+                    const exchangeAddresses = [
+                        '0x3f5ce5fbfe3e9af3971dd833d26ba9b5c936f0b4', // Binance
+                        '0x503828976d22510aad020410acf28c8d8b93c8ca', // Coinbase
+                        '0x0a869d79a7052c7f1b55a8ebabbea3420f0d1e1',  // Kraken
+                        '0xee7fa02464dd07e3e8d3e4fc24f5b5f2e2f6b6d3'  // Bybit
+                    ];
+                    
+                    return address && exchangeAddresses.some(addr => 
+                        address.toLowerCase().includes(addr.toLowerCase().slice(0, 10))
+                    );
+                }
+            },
+            
+            mounted() {
+                this.fetchData();
+                // Автообновление каждые 30 секунд
+                setInterval(this.fetchData, 30000);
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
