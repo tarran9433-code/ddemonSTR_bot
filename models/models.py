@@ -188,6 +188,29 @@ class Subscription:
         }
 
 
+@dataclass
+class PriceData:
+    """Represents price data for a token"""
+    symbol: str
+    price: float
+    change_24h: float
+    change_1h: float
+    volume_24h: float
+    market_cap: float
+    timestamp: datetime = field(default_factory=datetime.now)
+
+    def to_dict(self) -> dict:
+        return {
+            "symbol": self.symbol,
+            "price": self.price,
+            "change_24h": self.change_24h,
+            "change_1h": self.change_1h,
+            "volume_24h": self.volume_24h,
+            "market_cap": self.market_cap,
+            "timestamp": self.timestamp.isoformat(),
+        }
+
+
 class AlertHistory:
     """In-memory storage for alert history"""
 
